@@ -1,0 +1,144 @@
+#!/usr/bin/python3
+import sys,time
+import easysnmp
+import math
+from easysnmp import Session
+from easysnmp import snmp_get,snmp_walk
+
+oid = []
+for i in range(4, len(sys.argv)):
+	oid.append(sys.argv[i])  # sys.argv is used to read the arguments from command prompt
+oid.insert(0, '1.3.6.1.2.1.1.3.0')
+
+#print(oid)
+frequency = sys.argv[2]   #it takes the second input as frquency in command prompt
+time1 = float(frequency)
+time1 = 1 / time1 #frequency is inverse of time
+
+samplesArg = sys.argv[3] #takes samples input from the command prompt
+samples = float(samplesArg)
+samples = int(samples)
+
+column = sys.argv[1]     
+column = column.split(':')
+ipaddress = column[0]  #the first input is taken as the ip address
+port = column[1]  
+comm = column[2]
+time11 = 0
+past_arr = []
+past_arr = [0 for i in range(0,len(oid))]
+timedelay1 = time.time()
+def COUNTER64(calculaterate,timeupdate):
+    calculaterate = calculaterate + 2**64
+    calculaterate = int ( calculaterate / timeupdate)
+    return calculaterate
+
+def COUNTER32(calculaterate,timeupdate):
+    calculaterate = calculaterate + 2**32
+    calculaterate = int(calculaterate / timeupdate)
+    return calculaterate
+
+def snmp():
+    global timedelay1, time11, past_arr
+    session=Session(hostname=ipaddress,remote_port=port,community=comm,version=2,timeout=1,retries=1).get(oid)
+    snmpvalues=session
+    #print(snmpvalues)
+    pres_list = []
+    uptime = []
+    #print (" %s(%s)"%( b,b-a))
+
+
+    for i in range(0,len(snmpvalues)):
+        if snmpvalues[i].value!='NOSUCHINSTANCE' and snmpvalues[i].snmp_type!='NOSUCHINSTANCE':
+            pres_list.append(int(snmpvalues[i].value))
+            #pres_list[i] = snmpvalues[i].value
+        #print(pres_list)
+  
+    uptime = pres_list[0]
+    time22 = uptime
+    #print(time22)
+    newsample = time1 - (time.time() - timedelay1) 
+    #print(newsample)
+    #print(time.time() - timedelay1)
+
+    if (newsample < 0):
+        a = abs(newsample // time1)
+        while ((a + 1) * time1) > (time.time() - timedelay1):
+            pass
+        timedelay1 = time.time()
+        time11 = time22
+        snmp()
+        
+    else:
+        while time1 > time.time() - timedelay1:
+            pass
+
+        timedelay1 = time.time()
+
+        output = []
+        #print(int(time22) - time11)
+        timeupdate = ((time22) - time11 ) / 100
+        #print(timeupdate)
+        #print(round(timeupdate))
+        if (timeupdate <= 0):
+            print("Device will be Re-started")
+            time11 = 0
+        else:
+            output.append(time.time())
+
+            #print(pres_list)
+            #print(past_arr)
+            
+            for k in range(1,len(pres_list)):
+             
+                if snmpvalues[k].snmp_type =='GAUGE':
+                    if pres_list[k]-past_arr[k] > 0:
+                        output.append(" %s(+%s)"%( pres_list[k],pres_list[k]-past_arr[k]))
+                    elif pres_list[k]-past_arr[k] == 0:
+                        output.append(" %s(+-%s)"%( pres_list[k],pres_list[k]-past_arr[k]))
+                    else:
+                        output.append(" %s(%s)"%( pres_list[k],pres_list[k]-past_arr[k]))
+                
+                else:
+                    calculaterate = int(pres_list[k] - past_arr[k]) 
+                    #print(calculaterate)
+
+                    if (calculaterate < 0):
+                    
+                        if snmpvalues[k].snmp_type == 'COUNTER64':
+                            calculaterate = COUNTER64(calculaterate,timeupdate)
+                            output.append(calculaterate)
+                        elif snmpvalues[k].snmp_type == 'COUNTER32' or 'COUNTER':
+                            calculaterate = COUNTER32(calculaterate,timeupdate)
+                            output.append(calculaterate)
+                    
+                    else:
+                        calculaterate = int( calculaterate / timeupdate) 
+                        output.append(calculaterate)
+                        #print(calculaterate)
+            
+            for i in range(0,len(snmpvalues)):    
+                if snmpvalues[i].value=='NOSUCHINSTANCE' and snmpvalues[i].snmp_type=='NOSUCHINSTANCE':
+                    past_arr[i] = past_arr[i]
+                else:
+                    past_arr[i] = pres_list[i]
+                      
+            output = " | ".join(str(x) for x in output)
+            if count > 1:
+                print(output)
+        
+        time11 = time22
+
+if samples == -1:
+    count = 0
+    past_arr = []
+
+    while True:
+        snmp()
+        count = count + 1
+else:
+    for count in range(0,samples+2):
+
+	    snmp()
+        
+
